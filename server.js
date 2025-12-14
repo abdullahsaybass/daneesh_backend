@@ -19,11 +19,11 @@ app.use(cors({
     origin: 'http://localhost:3000'
 }));
 
+app.use("/api/auth", authRoutes);
 // API Endpoints
 app.get('/', (req, res) => {
     res.send('Hello World!');
 });
-app.use('/api/auth', authRoutes);
 
 // Start Server
 app.listen(PORT, () => {
