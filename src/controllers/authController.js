@@ -4,95 +4,77 @@ import StudentMaster from "../models/studentMasterSchema.js";
 import transporter from "../config/nodemailer.js";
 import User from "../models/user.js";
 
+
 export const register = async (req, res) => {
   const { rollno, email, password } = req.body;
 
   if (!rollno || !email || !password) {
-    return res.status(400).json({ success: false, message: "Roll no, Email, Password required" });
+    return res.status(400).json({ message: "Roll no, email, password required" });
   }
 
-  try {
-    // Check rollno in master collection
-    const masterStudent = await StudentMaster.findOne({ rollno });
-    if (!masterStudent) return res.status(404).json({ success: false, message: "Invalid roll number" });
-
-    // Prevent duplicate registration
-    const alreadyRegistered = await User.findOne({ rollno });
-    if (alreadyRegistered) return res.status(400).json({ success: false, message: "Student already registered" });
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user
-    const user = await User.create({
-      rollno,
-      name: masterStudent.name,
-      department: masterStudent.department,
-      year: masterStudent.year,
-      email,
-      password: hashedPassword
-    });
-
-    // Generate token
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-
-    res.cookie("token", token, { httpOnly: true, sameSite: "strict" });
-
-    res.status(201).json({ success: true, message: "Registration successful" });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+  
+  const masterStudent = await StudentMaster.findOne({ rollno });
+  if (!masterStudent) {
+    return res.status(400).json({ message: "Invalid university roll number" });
   }
+
+  
+  const exists = await User.findOne({ email });
+  if (exists) {
+    return res.status(400).json({ message: "Email already registered" });
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  await User.create({
+    rollno,
+    name: masterStudent.name,
+    department: masterStudent.department,
+    year: masterStudent.year,
+    email,
+    password: hashedPassword,
+    role: "student"
+  });
+
+  res.status(201).json({ success: true, message: "Student registered" });
 };
 
 export const login = async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ success: false, message: "Email and Password are required" });
+    return res.status(400).json({ message: "Email and password required" });
   }
 
-  try {
-    // 1️⃣ Find user in User collection
-    const user = await User.findOne({ email }).select("+password");
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
+  const user = await User.findOne({ email }).select("+password");
 
-    // 2️⃣ Check password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ success: false, message: "Invalid Credentials" });
-    }
-
-    // 3️⃣ Generate JWT
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-
-    // 4️⃣ Set cookie
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
-    // 5️⃣ Fetch official student info
-    const studentInfo = await StudentMaster.findOne({ rollno: user.rollno });
-
-    return res.status(200).json({
-      success: true,
-      message: "Login Successful",
-      data: {
-        rollno: studentInfo.rollno,
-        name: studentInfo.name,
-        email: user.email,
-        department: studentInfo.department,
-        year: studentInfo.year,
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+  if (!user) {
+    return res.status(401).json({ message: "Invalid credentials" });
   }
+
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    return res.status(401).json({ message: "Invalid credentials" });
+  }
+
+  const token = jwt.sign(
+    { id: user._id, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  res.cookie("token", token, {
+    httpOnly: true,
+    sameSite: "strict"
+  });
+
+  res.json({
+    success: true,
+    role: user.role
+  });
 };
+
+
 
 export const logout = async (req, res) => {
     try {
@@ -118,7 +100,7 @@ export const sendResetOtp = async (req, res) => {
     }
 
     try{
-        const user = await StudentMaster.findOne({ email });
+        const user = await User.findOne({ email });
         if(!user){
             return res.status(404).json({success:false, message: "User not found"});
         }
@@ -147,34 +129,55 @@ export const sendResetOtp = async (req, res) => {
 }
 
 export const resetPassword = async (req, res) => {
-    const { email, otp, newPassword } = req.body;
-    
-    if(!email || !otp || !newPassword){
-        return res.json({success:false, message: "All fields are required"});
-    }
-    try{
+  const { email, otp, newPassword } = req.body;
 
-        const user = await StudentMaster.findOne({ email }).select("+resetOtp +resetOtpExpiryAt");
-        if(!user){
-            return res.status(404).json({success:false, message: "User not found"});
-        }
+  if (!email || !otp || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      message: "All fields are required"
+    });
+  }
 
-        if(user.resetOtp === "" || user.resetOtp !== otp ){
-            return res.status(400).json({success:false, message: "Invalid OTP"});
-        }
+  try {
+    const user = await User.findOne({ email })
+      .select("+password +resetOtp +resetOtpExpiryAt");
 
-        if(user.resetOtpExpiryAt < Date.now()){
-            return res.status(400).json({success:false, message: "OTP Expired"});
-        }
-        
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        user.password = hashedPassword;
-        user.resetOtp = "";
-        user.resetOtpExpiryAt = null;
-
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
     }
 
-    catch (error) {
-        res.json({sucess:false, message: error.message});
+    if (!user.resetOtp || user.resetOtp !== String(otp).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP"
+      });
     }
-}
+
+    if (user.resetOtpExpiryAt < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP Expired"
+      });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.resetOtp = null;
+    user.resetOtpExpiryAt = null;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successful"
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};

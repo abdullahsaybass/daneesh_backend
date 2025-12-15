@@ -1,6 +1,7 @@
 import express from "express";
 import { register, login, logout,sendResetOtp,resetPassword } from '../controllers/authController.js';
 
+
 const authRoutes = express.Router();
 
 // Routes
