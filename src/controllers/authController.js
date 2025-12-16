@@ -63,10 +63,13 @@ export const login = async (req, res) => {
     { expiresIn: "7d" }
   );
 
-  res.cookie("token", token, {
-    httpOnly: true,
-    sameSite: "strict"
-  });
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
 
   res.json({
     success: true,
@@ -81,7 +84,9 @@ export const logout = async (req, res) => {
         res.clearCookie('token', {
             httpOnly: true,
             secure : process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+            path: '/',
+            maxAge: 7 * 24 * 60 * 60 * 1000
             
         })
 
@@ -178,6 +183,31 @@ export const resetPassword = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message
+    });
+  }
+};
+// controllers/userController.js
+export const getMyDashboard = async (req, res) => {
+  try {
+    const user = req.user;
+
+    res.json({
+      success: true,
+      dashboard: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        rollno: user.rollno || null,
+        department: user.department || null,
+        year: user.year || null,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
     });
   }
 };
