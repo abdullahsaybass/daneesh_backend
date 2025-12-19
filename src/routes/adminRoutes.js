@@ -6,25 +6,47 @@ import StudentMaster from "../models/studentMasterSchema.js";
 import { protect } from "../middleware/userAuth.js";
 import { adminOnly } from "../middleware/adminOnly.js";
 import { roleOnly } from "../middleware/roleAuth.js";
+
 import {
   adminDashboard,
-  createStaff,
-  addUser,
+  createUser,
   editUser,
-  deleteUser
+  deleteUser,
+  createCourse,
+  checkCourseExists,
+  updateCourse,
+  getAllCourses,
+  getCourseById,
+  deleteCourse,
+  getUserById,
+  getAllUsers
 } from "../controllers/adminController.js";
 
 const router = express.Router();
 
-/* ================= ADMIN ROUTES ================= */
-
+/* ================= ADMIN MIDDLEWARE ================= */
 router.use(protect, adminOnly);
 
+/* ================= DASHBOARD ================= */
 router.get("/dashboard", adminDashboard);
-router.post("/create-staff", createStaff);
-router.post("/add-user", addUser);
+
+/* ================= USER MANAGEMENT ================= */
+router.post("/create-user", createUser);
 router.put("/edit-user/:id", editUser);
 router.delete("/delete-user/:id", deleteUser);
+router.get("/user", getAllUsers);
+router.get("/user/:id", getUserById);
+
+
+
+/* ================= COURSE MANAGEMENT ================= */
+
+router.post("/create-course", createCourse);
+router.get("/courses/check", checkCourseExists);
+router.get("/courses", getAllCourses);
+router.get("/courses/:id", getCourseById);
+router.put("/courses/:id", updateCourse);
+router.delete("/courses/:id", deleteCourse);
 
 /* ================= BULK UPLOAD STUDENTS ================= */
 
@@ -32,11 +54,14 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/admin/"),
   filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname)
 });
+
 const upload = multer({ storage });
 
 router.post("/students/bulk-upload", upload.single("file"), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
 
     const workbook = XLSX.readFile(req.file.path);
     const sheetName = workbook.SheetNames[0];
@@ -65,32 +90,24 @@ router.post("/students/bulk-upload", upload.single("file"), async (req, res) => 
 
     res.json({
       success: true,
-      message: "Bulk upload/update completed",
+      message: "Bulk upload completed",
       stats: { created, updated }
     });
 
-  } catch (err) {
-    console.error(err);
+  } catch (error) {
+    console.error("BULK UPLOAD ERROR:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
 
 /* ================= TEACHER ROUTES ================= */
-router.get("/teacher/dashboard", protect, roleOnly("teacher"), (req, res) => {
-  res.json({
-    success: true,
-    message: "Welcome Teacher",
-    user: req.user
-  });
+router.get("/teacher/dashboard", roleOnly("teacher"), (req, res) => {
+  res.json({ success: true, message: "Welcome Teacher", user: req.user });
 });
 
 /* ================= INSTRUCTOR ROUTES ================= */
-router.get("/instructor/dashboard", protect, roleOnly("instructor"), (req, res) => {
-  res.json({
-    success: true,
-    message: "Welcome Instructor",
-    user: req.user
-  });
+router.get("/instructor/dashboard", roleOnly("instructor"), (req, res) => {
+  res.json({ success: true, message: "Welcome Instructor", user: req.user });
 });
 
 export default router;

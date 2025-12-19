@@ -6,77 +6,107 @@ import User from "../models/user.js";
 
 
 export const register = async (req, res) => {
-  const { rollno, email, password } = req.body;
+  try {
+    const { rollno, email, password } = req.body;
 
-  if (!rollno || !email || !password) {
-    return res.status(400).json({ message: "Roll no, email, password required" });
-  }
+    if (!rollno || !email || !password) {
+      return res.status(400).json({
+        message: "Roll no, email, password required"
+      });
+    }
 
+    // Check roll number in university master
+    const masterStudent = await StudentMaster.findOne({ rollno });
+    if (!masterStudent) {
+      return res.status(400).json({
+        message: "Invalid university roll number"
+      });
+    }
+
+    // Check existing user
+    const exists = await User.findOne({ email });
+    if (exists) {
+      return res.status(400).json({
+        message: "Email already registered"
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await User.create({
+      rollno,
+      name: masterStudent.name,
+      department: masterStudent.department,
+      year: masterStudent.year,
+      email,
+      password: hashedPassword,
+      role: "student"
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Student registered"
+    });
+
+  } 
   
-  const masterStudent = await StudentMaster.findOne({ rollno });
-  if (!masterStudent) {
-    return res.status(400).json({ message: "Invalid university roll number" });
+  catch (error) {
+    console.error("REGISTER ERROR:", error);
+    res.status(500).json({
+     sucess:false, message: error.message
+    });
   }
-
-  
-  const exists = await User.findOne({ email });
-  if (exists) {
-    return res.status(400).json({ message: "Email already registered" });
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  await User.create({
-    rollno,
-    name: masterStudent.name,
-    department: masterStudent.department,
-    year: masterStudent.year,
-    email,
-    password: hashedPassword,
-    role: "student"
-  });
-
-  res.status(201).json({ success: true, message: "Student registered" });
 };
 
 export const login = async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ message: "Email and password required" });
-  }
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Email and password required"
+      });
+    }
 
-  const user = await User.findOne({ email }).select("+password");
+    const user = await User.findOne({ email }).select("+password");
+    if (!user) {
+      return res.status(401).json({
+        message: "Invalid credentials"
+      });
+    }
 
-  if (!user) {
-    return res.status(401).json({ message: "Invalid credentials" });
-  }
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({
+        message: "Invalid credentials"
+      });
+    }
 
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) {
-    return res.status(401).json({ message: "Invalid credentials" });
-  }
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
-  const token = jwt.sign(
-    { id: user._id, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-
-    res.cookie("token", token, {
+     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
+    res.json({
+      success: true,
+      role: user.role
+    });
 
-  res.json({
-    success: true,
-    role: user.role
-  });
+  } catch (error) {
+    console.error("LOGIN ERROR:", error);
+    res.status(500).json({
+      sucess:false, message: error.message
+    });
+  }
 };
-
 
 
 export const logout = async (req, res) => {
@@ -186,28 +216,36 @@ export const resetPassword = async (req, res) => {
     });
   }
 };
-// controllers/userController.js
 export const getMyDashboard = async (req, res) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized access"
+      });
+    }
+
     const user = req.user;
 
-    res.json({
+    res.status(200).json({
       success: true,
       dashboard: {
         id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
-        rollno: user.rollno || null,
-        department: user.department || null,
-        year: user.year || null,
+        rollno: user.rollno ?? null,
+        department: user.department ?? null,
+        year: user.year ?? null,
         createdAt: user.createdAt
       }
     });
-  } catch (err) {
+
+  } catch (error) {
+    console.error("DASHBOARD ERROR:", error);
     res.status(500).json({
       success: false,
-      message: err.message
+      message: "Internal server error"
     });
   }
 };
@@ -215,6 +253,10 @@ export const getMyDashboard = async (req, res) => {
 export const me = async (req, res) => {
   res.status(200).json({
     success: true,
+<<<<<<< HEAD
     user: req.user,
+=======
+    user: req.user
+>>>>>>> dcddf4f (Update admin and auth controllers, add course & exam models, update routes)
   });
 };
