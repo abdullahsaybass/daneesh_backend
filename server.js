@@ -27,6 +27,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+
 // API Endpoints
 app.get('/', (req, res) => {
     res.send('Hello World!');

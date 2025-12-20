@@ -276,14 +276,17 @@ export const getCourseById = async (req, res) => {
       });
     }
 
-    return res.status(200).json({
+    // sort lessons
+    course.lessons.sort((a, b) => a.order - b.order);
+
+    res.status(200).json({
       success: true,
       course
     });
 
   } catch (error) {
     console.error("GET COURSE ERROR:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: "Failed to fetch course"
     });

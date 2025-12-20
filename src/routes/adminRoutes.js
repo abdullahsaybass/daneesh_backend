@@ -28,7 +28,8 @@ import {
   createLesson,
   updateLesson,
   deleteLesson,
-  getLessons
+  getLessons,
+  getSingleLesson
 } from "../controllers/lessonController.js";
 
 const router = express.Router();
@@ -41,13 +42,10 @@ router.get("/dashboard", adminDashboard);
 
 /* ================= USER MANAGEMENT ================= */
 router.post("/create-user", createUser);
-
 router.put("/edit-user/:id", editUser);
 router.delete("/delete-user/:id", deleteUser);
 router.get("/user", getAllUsers);
 router.get("/user/:id", getUserById);
-
-
 router.get("/course/check", checkCourseExists);
 
 // Get / Update / Delete course
@@ -63,7 +61,7 @@ router.post("/course/:courseId/lessons", createLesson);
 router.get("/course/:courseId/lessons", getLessons);
 router.put("/course/:courseId/lessons/:lessonId", updateLesson);
 router.delete("/course/:courseId/lessons/:lessonId", deleteLesson);
-
+router.get("/course/:courseId/lessons/:lessonId", getSingleLesson);
 
 /* ================= BULK UPLOAD STUDENTS ================= */
 

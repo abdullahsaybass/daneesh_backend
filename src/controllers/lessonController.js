@@ -1,47 +1,102 @@
 import mongoose from "mongoose";
 import {Course , Lesson} from '../models/course.js'
 
+
 export const createLesson = async (req, res) => {
   try {
-    const { title, description, contents, order, courseId } = req.body;
+    const { courseId } = req.params;
+    const { title, description, order, contents = [] } = req.body;
 
-    if (!title || !contents || contents.length === 0 || !order) {
+    /* ---------- VALIDATIONS ---------- */
+
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
       return res.status(400).json({
         success: false,
-        message: "Title, contents, and order are required"
+        message: "Invalid course ID"
       });
     }
 
-    // Optional: link lesson to a course
-    if (courseId && !mongoose.Types.ObjectId.isValid(courseId)) {
-      return res.status(400).json({ success: false, message: "Invalid course ID" });
+    if (!title || !order) {
+      return res.status(400).json({
+        success: false,
+        message: "Title and order are required"
+      });
     }
 
-    const lesson = await Lesson.create({
-      title: String(title).trim(),
+    if (!Number.isInteger(order) || order < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Order must be a positive integer"
+      });
+    }
+
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found"
+      });
+    }
+
+    /* ---------- DUPLICATE TITLE + DESCRIPTION CHECK ---------- */
+
+    const normalizedTitle = title.trim().toLowerCase();
+    const normalizedDesc = description?.trim().toLowerCase() || "";
+
+    const duplicateLesson = course.lessons.some(lesson =>
+      lesson.title.trim().toLowerCase() === normalizedTitle &&
+      (lesson.description?.trim().toLowerCase() || "") === normalizedDesc
+    );
+
+    if (duplicateLesson) {
+      return res.status(409).json({
+        success: false,
+        message: "Lesson with same title and description already exists"
+      });
+    }
+
+    /* ---------- DUPLICATE ORDER CHECK ---------- */
+
+    const orderExists = course.lessons.some(
+      lesson => lesson.order === order
+    );
+
+    if (orderExists) {
+      return res.status(409).json({
+        success: false,
+        message: `Lesson with order ${order} already exists`
+      });
+    }
+
+    /* ---------- ADD LESSON ---------- */
+
+    course.lessons.push({
+      title: title.trim(),
       description,
       contents,
       order,
       createdBy: req.user._id
     });
 
-    // Optional: add lesson to course lessons array
-    if (courseId) {
-      const course = await Course.findById(courseId);
-      if (!course) return res.status(404).json({ success: false, message: "Course not found" });
+    /* ---------- SORT LESSONS ---------- */
+    course.lessons.sort((a, b) => a.order - b.order);
 
-      course.lessons.push(lesson._id);
-      await course.save();
-    }
+    await course.save();
 
-    res.status(201).json({ success: true, message: "Lesson created", lesson });
+    return res.status(201).json({
+      success: true,
+      message: "Lesson added successfully",
+      lessons: course.lessons
+    });
 
   } catch (error) {
     console.error("CREATE LESSON ERROR:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create lesson"
+    });
   }
 };
-
 
 // update and edit course
 
@@ -50,28 +105,63 @@ export const updateLesson = async (req, res) => {
     const { courseId, lessonId } = req.params;
     const { title, description, contents, order } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(courseId) || !mongoose.Types.ObjectId.isValid(lessonId)) {
-      return res.status(400).json({ success: false, message: "Invalid course or lesson ID" });
+    if (
+      !mongoose.Types.ObjectId.isValid(courseId) ||
+      !mongoose.Types.ObjectId.isValid(lessonId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course or lesson ID"
+      });
     }
 
     const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found"
+      });
+    }
 
-    const lesson = course.lessons.id(lessonId);
-    if (!lesson) return res.status(404).json({ success: false, message: "Lesson not found" });
+    /* ---------- FIND LESSON INDEX ---------- */
+    const lessonIndex = course.lessons.findIndex(
+      lesson => lesson._id.toString() === lessonId
+    );
 
-    if (title) lesson.title = title.trim();
+    if (lessonIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: "Lesson not found"
+      });
+    }
+
+    const lesson = course.lessons[lessonIndex];
+
+    /* ---------- UPDATE FIELDS ---------- */
+    if (title !== undefined) lesson.title = title.trim();
     if (description !== undefined) lesson.description = description;
     if (contents !== undefined) lesson.contents = contents;
     if (order !== undefined) lesson.order = order;
 
+    /* ---------- SORT AGAIN IF ORDER CHANGED ---------- */
+    if (order !== undefined) {
+      course.lessons.sort((a, b) => a.order - b.order);
+    }
+
     await course.save();
 
-    res.json({ success: true, message: "Lesson updated", lesson });
+    return res.json({
+      success: true,
+      message: "Lesson updated successfully",
+      lesson
+    });
 
   } catch (error) {
-    console.error("UPDATE LESSON IN COURSE ERROR:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("UPDATE LESSON ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
   }
 };
 
@@ -81,45 +171,74 @@ export const deleteLesson = async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(courseId) || !mongoose.Types.ObjectId.isValid(lessonId)) {
-      return res.status(400).json({ success: false, message: "Invalid course or lesson ID" });
+    if (
+      !mongoose.Types.ObjectId.isValid(courseId) ||
+      !mongoose.Types.ObjectId.isValid(lessonId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course or lesson ID"
+      });
     }
 
     const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found"
+      });
+    }
 
-    const lesson = course.lessons.id(lessonId);
-    if (!lesson) return res.status(404).json({ success: false, message: "Lesson not found" });
+    const lessonExists = course.lessons.some(
+      lesson => lesson._id.toString() === lessonId
+    );
 
-    // Remove lesson from the course
-    lesson.remove();
+    if (!lessonExists) {
+      return res.status(404).json({
+        success: false,
+        message: "Lesson not found"
+      });
+    }
+
+    /* ---------- REMOVE EMBEDDED LESSON ---------- */
+    course.lessons.pull({ _id: lessonId });
+
     await course.save();
 
-    res.json({ success: true, message: "Lesson deleted successfully" });
+    return res.json({
+      success: true,
+      message: "Lesson deleted successfully"
+    });
 
   } catch (error) {
-    console.error("DELETE LESSON IN COURSE ERROR:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("DELETE LESSON ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
   }
 };
-
 // get all lessons of a course
-
 export const getLessons = async (req, res) => {
   try {
     const { courseId } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(courseId)) {
-      return res.status(400).json({ success: false, message: "Invalid course ID" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course ID"
+      });
     }
 
     const course = await Course.findById(courseId).select("title lessons");
 
     if (!course) {
-      return res.status(404).json({ success: false, message: "Course not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Course not found"
+      });
     }
 
-    // Sort lessons by order
     const lessons = course.lessons.sort((a, b) => a.order - b.order);
 
     res.status(200).json({
@@ -130,31 +249,65 @@ export const getLessons = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("GET LESSONS BY COURSE ERROR:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch lessons" });
+    console.error("GET LESSONS ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch lessons"
+    });
   }
 };
 
+
 /* ---------- GET SINGLE LESSON OF A COURSE ---------- */
-export const getLessonByCourse = async (req, res) => {
+export const getSingleLesson = async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(courseId) || !mongoose.Types.ObjectId.isValid(lessonId)) {
-      return res.status(400).json({ success: false, message: "Invalid course or lesson ID" });
+    if (
+      !mongoose.Types.ObjectId.isValid(courseId) ||
+      !mongoose.Types.ObjectId.isValid(lessonId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course or lesson ID"
+      });
     }
 
-    const course = await Course.findById(courseId).select("title lessons");
+    const course = await Course.findById(courseId).lean();
 
-    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found"
+      });
+    }
 
-    const lesson = course.lessons.id(lessonId);
-    if (!lesson) return res.status(404).json({ success: false, message: "Lesson not found" });
+    const lesson = course.lessons.find(
+      l => l._id.toString() === lessonId.toString()
+    );
 
-    res.status(200).json({ success: true, courseTitle: course.title, lesson });
+    if (!lesson) {
+      return res.status(404).json({
+        success: false,
+        message: "Lesson not found",
+        availableLessons: course.lessons.map(l => ({
+          id: l._id,
+          title: l.title
+        }))
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      courseTitle: course.title,
+      lesson
+    });
 
   } catch (error) {
-    console.error("GET LESSON BY COURSE ERROR:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("GET SINGLE LESSON ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
   }
 };
