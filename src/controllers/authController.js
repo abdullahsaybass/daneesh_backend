@@ -253,10 +253,7 @@ export const getMyDashboard = async (req, res) => {
 export const me = async (req, res) => {
   res.status(200).json({
     success: true,
-<<<<<<< HEAD
+
     user: req.user,
-=======
-    user: req.user
->>>>>>> dcddf4f (Update admin and auth controllers, add course & exam models, update routes)
   });
 };

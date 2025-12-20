@@ -12,7 +12,7 @@ const contentSchema = new mongoose.Schema({
     type: String,
     required: function () { return this.type === "pdf"; }
   },
-  duration: String,
+  duration: String, // optional
   isPreview: { type: Boolean, default: false }
 });
 
@@ -45,13 +45,20 @@ const examSchema = new mongoose.Schema({
 });
 
 /* ---------- LESSON ---------- */
-const lessonSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  description: String,
-  order: { type: Number, required: true, min: 1 },
-  contents: [contentSchema],
-  exam: examSchema
-});
+const lessonSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    description: String,
+    contents: [contentSchema], // array of video/pdf
+    order: { type: Number, required: true, min: 1 }, // for sorting lessons
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    }
+  },
+  { timestamps: true }
+);
 
 /* ---------- COURSE ---------- */
 const courseSchema = new mongoose.Schema(
@@ -84,4 +91,5 @@ const courseSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model("Course", courseSchema);
+export const Lesson = mongoose.model("Lesson", lessonSchema);
+export const Course = mongoose.model("Course", courseSchema);

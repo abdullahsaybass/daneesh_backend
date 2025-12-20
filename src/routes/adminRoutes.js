@@ -12,15 +12,24 @@ import {
   createUser,
   editUser,
   deleteUser,
+  getAllUsers,
+  getUserById
+} from "../controllers/adminController.js";
+import {
   createCourse,
   checkCourseExists,
   updateCourse,
   getAllCourses,
   getCourseById,
-  deleteCourse,
-  getUserById,
-  getAllUsers
-} from "../controllers/adminController.js";
+  deleteCourse
+} from "../controllers/courseController.js";
+
+import {
+  createLesson,
+  updateLesson,
+  deleteLesson,
+  getLessons
+} from "../controllers/lessonController.js";
 
 const router = express.Router();
 
@@ -32,21 +41,29 @@ router.get("/dashboard", adminDashboard);
 
 /* ================= USER MANAGEMENT ================= */
 router.post("/create-user", createUser);
+
 router.put("/edit-user/:id", editUser);
 router.delete("/delete-user/:id", deleteUser);
 router.get("/user", getAllUsers);
 router.get("/user/:id", getUserById);
 
 
+router.get("/course/check", checkCourseExists);
 
-/* ================= COURSE MANAGEMENT ================= */
+// Get / Update / Delete course
+router.post("/course", createCourse);
+router.get("/course", getAllCourses)
+router.get("/course/:courseId", getCourseById);
+router.put("/course/:courseId", updateCourse);
+router.delete("/course/:courseId", deleteCourse);
 
-router.post("/create-course", createCourse);
-router.get("/courses/check", checkCourseExists);
-router.get("/courses", getAllCourses);
-router.get("/courses/:id", getCourseById);
-router.put("/courses/:id", updateCourse);
-router.delete("/courses/:id", deleteCourse);
+/* ================= LESSON MANAGEMENT (ADMIN ONLY) ================= */
+
+router.post("/course/:courseId/lessons", createLesson);
+router.get("/course/:courseId/lessons", getLessons);
+router.put("/course/:courseId/lessons/:lessonId", updateLesson);
+router.delete("/course/:courseId/lessons/:lessonId", deleteLesson);
+
 
 /* ================= BULK UPLOAD STUDENTS ================= */
 
